@@ -947,8 +947,8 @@ func (task *Task) dockerHostConfig(container *apicontainer.Container, dockerCont
 			Type: "fluentd",
 			Config: map[string]string{
 				"fluentd-address": "127.0.0.10:24224",
-				"tag": "from-custom-agent",
-			}, 
+				"tag":             container.Name + "-from-hacked-agent",
+			},
 		}
 	}
 
