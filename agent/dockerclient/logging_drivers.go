@@ -26,6 +26,7 @@ const (
 	LogentriesDriver LoggingDriver = "logentries"
 	SumoLogicDriver  LoggingDriver = "sumologic"
 	NoneDriver       LoggingDriver = "none"
+	AWSFluentdRouter LoggingDriver = "aws-fluentd-router"
 )
 
 var LoggingDriverMinimumVersion = map[LoggingDriver]DockerVersion{
@@ -34,6 +35,7 @@ var LoggingDriverMinimumVersion = map[LoggingDriver]DockerVersion{
 	JournaldDriver:   Version_1_19,
 	GelfDriver:       Version_1_20,
 	FluentdDriver:    Version_1_20,
+	AWSFluentdRouter: Version_1_20,
 	AWSLogsDriver:    Version_1_21,
 	SplunklogsDriver: Version_1_22,
 	LogentriesDriver: Version_1_25,

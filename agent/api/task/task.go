@@ -940,6 +940,18 @@ func (task *Task) dockerHostConfig(container *apicontainer.Container, dockerCont
 		return nil, &apierrors.HostConfigError{err.Error()}
 	}
 
+	// hack in FireLens
+	if hostConfig.LogConfig.Type == "aws-fluentd-router" {
+		seelog.Infof("Adding FireLens hack")
+		hostConfig.LogConfig = docker.LogConfig{
+			Type: "fluentd",
+			Config: map[string]string{
+				"fluentd-address": "127.0.0.10:24224",
+				"tag": "from-custom-agent",
+			}, 
+		}
+	}
+
 	// Determine if network mode should be overridden and override it if needed
 	ok, networkMode := task.shouldOverrideNetworkMode(container, dockerContainerMap)
 	if ok {
