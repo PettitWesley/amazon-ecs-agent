@@ -17,6 +17,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -30,6 +32,7 @@ import (
 	apieni "github.com/aws/amazon-ecs-agent/agent/api/eni"
 	apierrors "github.com/aws/amazon-ecs-agent/agent/api/errors"
 	apitaskstatus "github.com/aws/amazon-ecs-agent/agent/api/task/status"
+	"github.com/aws/amazon-ecs-agent/agent/awsfluentdrouter"
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/credentials"
 	"github.com/aws/amazon-ecs-agent/agent/dockerclient"
@@ -187,6 +190,9 @@ type Task struct {
 	// IPCMode is used to determine how IPC resources should be shared among
 	// containers of the Task
 	IPCMode string `json:"IpcMode,omitempty"`
+
+	// The Host Dir that contains the Fluentd Config file and Unix Socket
+	awsFluentdRouterHostDir string
 
 	// lock is for protecting all fields in the task struct
 	lock sync.RWMutex
@@ -652,6 +658,92 @@ func (task *Task) addNamespaceSharingProvisioningDependency(cfg *config.Config) 
 	}
 }
 
+func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
+	dockerConfigMap := make(map[string]*docker.HostConfig)
+
+	// determine if any containers use aws-fluentd-router
+	// save the HostConfig's so that we don't have to unmarshal them a second time later
+	var usesRouter bool
+	for _, container := range task.Containers {
+		if container.IsInternal() {
+			continue
+		}
+		hostConfig := &docker.HostConfig{}
+		if container.DockerConfig.HostConfig != nil {
+			err := json.Unmarshal([]byte(*container.DockerConfig.HostConfig), hostConfig)
+			if err != nil {
+				// add method name to error to aid in debugging
+				return fmt.Errorf("initializeAWSFluentdRouterIfNeeded: Unable to decode given host config: " + err.Error())
+			}
+		}
+
+		if hostConfig.LogConfig.Type == "aws-fluentd-router" {
+			usesRouter = true
+		}
+		dockerConfigMap[container.Name] = hostConfig
+	}
+
+	if usesRouter {
+		router := awsfluentdrouter.NewAWSFluentdRouterConfig(cfg.Cluster, task.Arn, task.Family, task.Version)
+		for containerName, hostConfig := range dockerConfigMap {
+			err := router.AddContainer(containerName, hostConfig.LogConfig.Config)
+			if err != nil {
+				return err
+			}
+		}
+
+		taskID, err := task.GetID()
+		if err != nil {
+			return err
+		}
+
+		routerDir := path.Join(os.Getenv("ECS_DATADIR"), "awsfluentdrouter", taskID)
+		err = os.MkdirAll(routerDir, 0777)
+		if err != nil {
+			return err
+		}
+		f, err := os.Create(path.Join(routerDir, "fluent.conf"))
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		router.ToFluentdConfig(f)
+
+		// TODO: this only works assuming that ECS_DATADIR in agent container is /var/lib/ecs/data on the host
+		task.awsFluentdRouterHostDir = path.Join("/var/lib/ecs/data", "awsfluentdrouter", taskID)
+
+		// Launch Fluentd Container
+		hostConfig := &docker.HostConfig{
+			Binds: []string{
+				fmt.Sprintf("%s:%s", task.awsFluentdRouterHostDir, "/"),
+			},
+		}
+		hostConfigBytes, err := json.Marshal(hostConfig)
+		if err != nil {
+			return err
+		}
+		marshaledHostConfig := string(hostConfigBytes)
+		fluentdContainer := apicontainer.NewContainerWithSteadyState(apicontainerstatus.ContainerRunning)
+		fluentdContainer.TransitionDependenciesMap = make(map[apicontainerstatus.ContainerStatus]apicontainer.TransitionDependencySet)
+		fluentdContainer.Name = "aws-fluentd-router"
+		fluentdContainer.Image = "aws-fluentd-router:latest"
+		fluentdContainer.Essential = true
+		fluentdContainer.Type = apicontainer.ContainerNormal
+		fluentdContainer.DockerConfig.HostConfig = &marshaledHostConfig
+		task.Containers = append(task.Containers, fluentdContainer)
+
+		for _, container := range task.Containers {
+			if container.IsInternal() {
+				continue
+			}
+			container.BuildContainerDependency("aws-fluentd-router", apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerPulled)
+			fluentdContainer.BuildContainerDependency(container.Name, apicontainerstatus.ContainerStopped, apicontainerstatus.ContainerStopped)
+		}
+	}
+
+	return nil
+}
+
 // ContainerByName returns the *Container for the given name
 func (task *Task) ContainerByName(name string) (*apicontainer.Container, bool) {
 	for _, container := range task.Containers {
@@ -938,18 +1030,6 @@ func (task *Task) dockerHostConfig(container *apicontainer.Container, dockerCont
 	err = task.platformHostConfigOverride(hostConfig)
 	if err != nil {
 		return nil, &apierrors.HostConfigError{err.Error()}
-	}
-
-	// hack in FireLens
-	if hostConfig.LogConfig.Type == "aws-fluentd-router" {
-		seelog.Infof("Adding FireLens hack")
-		hostConfig.LogConfig = docker.LogConfig{
-			Type: "fluentd",
-			Config: map[string]string{
-				"fluentd-address": "127.0.0.10:24224",
-				"tag":             container.Name + "-from-hacked-agent",
-			},
-		}
 	}
 
 	// Determine if network mode should be overridden and override it if needed
