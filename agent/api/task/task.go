@@ -267,6 +267,8 @@ func (task *Task) PostUnmarshalTask(cfg *config.Config,
 	task.addNetworkResourceProvisioningDependency(cfg)
 	// Adds necessary Pause containers for sharing PID or IPC namespaces
 	task.addNamespaceSharingProvisioningDependency(cfg)
+	// Adds Fluentd side-car if needed
+	task.initializeAWSFluentdRouterIfNeeded(cfg)
 
 	return nil
 }
@@ -730,6 +732,11 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 		fluentdContainer.Essential = true
 		fluentdContainer.Type = apicontainer.ContainerNormal
 		fluentdContainer.DockerConfig.HostConfig = &marshaledHostConfig
+		fluentdContainer.Environment = map[string]string{
+			"FLUENTD_CONF": "/fluentd.conf",
+			"FLUENTD_OPT":  "-v",
+			"FLUENT_UID":   "0",
+		}
 		task.Containers = append(task.Containers, fluentdContainer)
 
 		for _, container := range task.Containers {
@@ -1057,6 +1064,16 @@ func (task *Task) dockerHostConfig(container *apicontainer.Container, dockerCont
 	ok, ipcMode := task.shouldOverrideIPCMode(container, dockerContainerMap)
 	if ok {
 		hostConfig.IpcMode = ipcMode
+	}
+
+	if hostConfig.LogConfig.Type == "aws-fluentd-router" {
+		hostConfig.LogConfig = docker.LogConfig{
+			Type: "fluentd",
+			Config: map[string]string{
+				"fluentd-address": fmt.Sprintf("unix://%s/fluentd.sock", task.awsFluentdRouterHostDir),
+				"tag":             container.Name,
+			},
+		}
 	}
 
 	return hostConfig, nil
