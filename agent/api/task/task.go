@@ -663,7 +663,7 @@ func (task *Task) addNamespaceSharingProvisioningDependency(cfg *config.Config) 
 func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Recovered in initializeAWSFluentdRouterIfNeeded: ", r)
+			seelog.Infof("AFR: Recovered in initializeAWSFluentdRouterIfNeeded: %s", r)
 		}
 	}()
 	dockerConfigMap := make(map[string]*docker.HostConfig)
@@ -717,8 +717,9 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 		if err != nil {
 			return err
 		}
+		seelog.Info("AFR: About to write fluentd config")
+		defer f.Close()
 		router.ToFluentdConfig(f)
-		f.Close()
 		seelog.Info("AFR: Wrote fluentd config")
 
 		// TODO: this only works assuming that ECS_DATADIR in agent container is /var/lib/ecs/data on the host

@@ -37,7 +37,7 @@ func (config *AWSFluentdRouterConfig) AddContainer(name string, logOptions map[s
 	seelog.Infof("Parser: Adding container %s with options: %s", name, logOptions)
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Recovered in AddContainer: ", r)
+			seelog.Infof("AFR: Recovered in AddContainer: %s", r)
 		}
 	}()
 
