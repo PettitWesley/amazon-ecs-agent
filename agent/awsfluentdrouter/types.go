@@ -11,7 +11,7 @@ type AWSFluentdRouterConfig struct {
 }
 
 func (config *AWSFluentdRouterConfig) ToFluentdConfig(wr io.Writer) {
-	tmpl := template.Must(template.ParseFiles("agent/awsfluentdrouter/template.conf"))
+	tmpl := template.Must(template.New("fluent.conf").Parse(fluentdConfigTemplate))
 	tmpl.Execute(wr, *config)
 }
 
