@@ -1082,10 +1082,15 @@ func (task *Task) dockerHostConfig(container *apicontainer.Container, dockerCont
 
 	if hostConfig.LogConfig.Type == "aws-fluentd-router" {
 		seelog.Infof("AFR: Overriding host config for: %s", container.Name)
+		taskID, err := task.GetID()
+		if err != nil {
+			return nil, &apierrors.HostConfigError{err.Error()}
+		}
+		hostDir := path.Join("/var/lib/ecs/data", "awsfluentdrouter", taskID)
 		hostConfig.LogConfig = docker.LogConfig{
 			Type: "fluentd",
 			Config: map[string]string{
-				"fluentd-address": fmt.Sprintf("unix://%s/fluentd.sock", task.awsFluentdRouterHostDir),
+				"fluentd-address": fmt.Sprintf("unix://%s/fluentd.sock", hostDir),
 				"tag":             container.Name,
 			},
 		}
