@@ -661,6 +661,11 @@ func (task *Task) addNamespaceSharingProvisioningDependency(cfg *config.Config) 
 }
 
 func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered in initializeAWSFluentdRouterIfNeeded: ", r)
+		}
+	}()
 	dockerConfigMap := make(map[string]*docker.HostConfig)
 
 	// determine if any containers use aws-fluentd-router

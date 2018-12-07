@@ -35,6 +35,12 @@ func NewAWSFluentdRouterConfig(cluster, taskARN, taskDefinitionFamily, taskDefin
 
 func (config *AWSFluentdRouterConfig) AddContainer(name string, logOptions map[string]string) error {
 	seelog.Infof("Parser: Adding container %s with options: %s", name, logOptions)
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered in AddContainer: ", r)
+		}
+	}()
+
 	parsedOptions := make(map[string]map[string]string)
 	container := Container{
 		Tag: name,
