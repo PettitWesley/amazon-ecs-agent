@@ -667,6 +667,7 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 	// save the HostConfig's so that we don't have to unmarshal them a second time later
 	var usesRouter bool
 	for _, container := range task.Containers {
+		seelog.Infof("AFR: Checking HostConfig for container %s", container.Name)
 		if container.IsInternal() {
 			continue
 		}
@@ -680,12 +681,14 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 		}
 
 		if hostConfig.LogConfig.Type == "aws-fluentd-router" {
+			seelog.Info("AFR: Found container that uses aws-fluentd-router")
+			dockerConfigMap[container.Name] = hostConfig
 			usesRouter = true
 		}
-		dockerConfigMap[container.Name] = hostConfig
 	}
 
 	if usesRouter {
+		seelog.Infof("AFR: processing containers: %v", dockerConfigMap)
 		router := awsfluentdrouter.NewAWSFluentdRouterConfig(cfg.Cluster, task.Arn, task.Family, task.Version)
 		for containerName, hostConfig := range dockerConfigMap {
 			err := router.AddContainer(containerName, hostConfig.LogConfig.Config)
@@ -700,6 +703,7 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 		}
 
 		routerDir := path.Join(os.Getenv("ECS_DATADIR"), "awsfluentdrouter", taskID)
+		seelog.Infof("AFR: Constructing router dir: %s", routerDir)
 		err = os.MkdirAll(routerDir, 0777)
 		if err != nil {
 			return err
@@ -708,11 +712,13 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 		if err != nil {
 			return err
 		}
-		defer f.Close()
 		router.ToFluentdConfig(f)
+		f.Close()
+		seelog.Info("AFR: Wrote fluentd config")
 
 		// TODO: this only works assuming that ECS_DATADIR in agent container is /var/lib/ecs/data on the host
 		task.awsFluentdRouterHostDir = path.Join("/var/lib/ecs/data", "awsfluentdrouter", taskID)
+		seelog.Infof("AFR: Set fluentd host dir: %s", task.awsFluentdRouterHostDir)
 
 		// Launch Fluentd Container
 		hostConfig := &docker.HostConfig{
@@ -720,6 +726,7 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 				fmt.Sprintf("%s:%s", task.awsFluentdRouterHostDir, "/"),
 			},
 		}
+		seelog.Infof("AFR: Creating fluentd with host config: %v", *hostConfig)
 		hostConfigBytes, err := json.Marshal(hostConfig)
 		if err != nil {
 			return err
@@ -737,12 +744,14 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 			"FLUENTD_OPT":  "-v",
 			"FLUENT_UID":   "0",
 		}
+		seelog.Infof("AFR: Building fluentd container: %v", fluentdContainer)
 		task.Containers = append(task.Containers, fluentdContainer)
 
 		for _, container := range task.Containers {
 			if container.IsInternal() {
 				continue
 			}
+			seelog.Infof("AFR: Building dependency with: %s", container.Name)
 			container.BuildContainerDependency("aws-fluentd-router", apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerPulled)
 			fluentdContainer.BuildContainerDependency(container.Name, apicontainerstatus.ContainerStopped, apicontainerstatus.ContainerStopped)
 		}
@@ -1067,6 +1076,7 @@ func (task *Task) dockerHostConfig(container *apicontainer.Container, dockerCont
 	}
 
 	if hostConfig.LogConfig.Type == "aws-fluentd-router" {
+		seelog.Infof("AFR: Overriding host config for: %s", container.Name)
 		hostConfig.LogConfig = docker.LogConfig{
 			Type: "fluentd",
 			Config: map[string]string{
@@ -1074,6 +1084,7 @@ func (task *Task) dockerHostConfig(container *apicontainer.Container, dockerCont
 				"tag":             container.Name,
 			},
 		}
+		seelog.Infof("AFR: Set log config as: %v", hostConfig.LogConfig)
 	}
 
 	return hostConfig, nil

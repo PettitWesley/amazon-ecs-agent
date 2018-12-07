@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws/arn"
+	"github.com/cihub/seelog"
 	"github.com/pkg/errors"
 )
 
@@ -33,6 +34,7 @@ func NewAWSFluentdRouterConfig(cluster, taskARN, taskDefinitionFamily, taskDefin
 }
 
 func (config *AWSFluentdRouterConfig) AddContainer(name string, logOptions map[string]string) error {
+	seelog.Infof("Parser: Adding container %s with options: %s", name, logOptions)
 	parsedOptions := make(map[string]map[string]string)
 	container := Container{
 		Tag: name,
@@ -104,7 +106,7 @@ func (config *AWSFluentdRouterConfig) AddContainer(name string, logOptions map[s
 
 		container.Destinations = append(container.Destinations, dest)
 	}
-
+	seelog.Infof("Parser: Added container %s", container)
 	config.Containers = append(config.Containers, container)
 	return nil
 }
