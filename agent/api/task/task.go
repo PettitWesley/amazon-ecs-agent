@@ -751,7 +751,6 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 			"FLUENT_UID":   "0",
 		}
 		seelog.Infof("AFR: Building fluentd container: %v", fluentdContainer)
-		task.Containers = append(task.Containers, fluentdContainer)
 
 		for _, container := range task.Containers {
 			if container.IsInternal() {
@@ -761,6 +760,8 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 			container.BuildContainerDependency("aws-fluentd-router", apicontainerstatus.ContainerRunning, apicontainerstatus.ContainerPulled)
 			fluentdContainer.BuildContainerDependency(container.Name, apicontainerstatus.ContainerStopped, apicontainerstatus.ContainerStopped)
 		}
+
+		task.Containers = append(task.Containers, fluentdContainer)
 	}
 
 	return nil
