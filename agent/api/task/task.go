@@ -729,7 +729,7 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 		// Launch Fluentd Container
 		hostConfig := &docker.HostConfig{
 			Binds: []string{
-				fmt.Sprintf("%s:%s", task.awsFluentdRouterHostDir, "/"),
+				fmt.Sprintf("%s:%s", task.awsFluentdRouterHostDir, "/fluentd"),
 			},
 		}
 		seelog.Infof("AFR: Creating fluentd with host config: %v", *hostConfig)
@@ -741,12 +741,12 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 		fluentdContainer := apicontainer.NewContainerWithSteadyState(apicontainerstatus.ContainerRunning)
 		fluentdContainer.TransitionDependenciesMap = make(map[apicontainerstatus.ContainerStatus]apicontainer.TransitionDependencySet)
 		fluentdContainer.Name = "aws-fluentd-router"
-		fluentdContainer.Image = "aws-fluentd-router:latest"
+		fluentdContainer.Image = "144718711470.dkr.ecr.us-east-2.amazonaws.com/aws-fluentd-router:latest"
 		fluentdContainer.Essential = true
 		fluentdContainer.Type = apicontainer.ContainerNormal
 		fluentdContainer.DockerConfig.HostConfig = &marshaledHostConfig
 		fluentdContainer.Environment = map[string]string{
-			"FLUENTD_CONF": "/fluentd.conf",
+			"FLUENTD_CONF": "/fluentd/fluentd.conf",
 			"FLUENTD_OPT":  "-v",
 			"FLUENT_UID":   "0",
 		}
