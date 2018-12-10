@@ -3,7 +3,7 @@ package awsfluentdrouter
 var fluentdConfigTemplate = `
 <source>
   @type unix
-  path /fluentd/fluentd.sock
+  path /socket/fluentd.sock
   @id docker_input
 </source>
 

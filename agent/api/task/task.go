@@ -692,6 +692,14 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 		}
 	}
 
+	for _, container := range task.Containers {
+		seelog.Infof("AFR: Listing existing containers: %s", container.Name)
+		if container.Name == "aws-fluentd-router" {
+			seelog.Infof("AFR---: Found existing aws-fluentd-router container ---- ****")
+			usesRouter = false
+		}
+	}
+
 	if usesRouter {
 		seelog.Infof("AFR: processing containers: %v", dockerConfigMap)
 		router := awsfluentdrouter.NewAWSFluentdRouterConfig(cfg.Cluster, task.Arn, task.Family, task.Version)
@@ -709,11 +717,15 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 
 		routerDir := path.Join(os.Getenv("ECS_DATADIR"), "awsfluentdrouter", taskID)
 		seelog.Infof("AFR: Constructing router dir: %s", routerDir)
-		err = os.MkdirAll(routerDir, 0777)
+		err = os.MkdirAll(path.Join(routerDir, "config"), 0777)
 		if err != nil {
 			return err
 		}
-		f, err := os.Create(path.Join(routerDir, "fluent.conf"))
+		err = os.MkdirAll(path.Join(routerDir, "socket"), 0777)
+		if err != nil {
+			return err
+		}
+		f, err := os.Create(path.Join(routerDir, "config", "fluent.conf"))
 		if err != nil {
 			return err
 		}
@@ -729,7 +741,8 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 		// Launch Fluentd Container
 		hostConfig := &docker.HostConfig{
 			Binds: []string{
-				fmt.Sprintf("%s:%s", task.awsFluentdRouterHostDir, "/fluentd"),
+				fmt.Sprintf("%s:%s", path.Join(task.awsFluentdRouterHostDir, "config"), "/fluentd/etc/config"),
+				fmt.Sprintf("%s:%s", path.Join(task.awsFluentdRouterHostDir, "socket"), "/socket"),
 			},
 		}
 		seelog.Infof("AFR: Creating fluentd with host config: %v", *hostConfig)
@@ -746,7 +759,7 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 		fluentdContainer.Type = apicontainer.ContainerNormal
 		fluentdContainer.DockerConfig.HostConfig = &marshaledHostConfig
 		fluentdContainer.Environment = map[string]string{
-			"FLUENTD_CONF": "/fluentd/fluentd.conf",
+			"FLUENTD_CONF": "config/fluent.conf",
 			"FLUENTD_OPT":  "-v",
 			"FLUENT_UID":   "0",
 		}
@@ -1088,7 +1101,7 @@ func (task *Task) dockerHostConfig(container *apicontainer.Container, dockerCont
 		if err != nil {
 			return nil, &apierrors.HostConfigError{err.Error()}
 		}
-		hostDir := path.Join("/var/lib/ecs/data", "awsfluentdrouter", taskID)
+		hostDir := path.Join("/var/lib/ecs/data", "awsfluentdrouter", taskID, "socket")
 		hostConfig.LogConfig = docker.LogConfig{
 			Type: "fluentd",
 			Config: map[string]string{
