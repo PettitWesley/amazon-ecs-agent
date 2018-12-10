@@ -741,7 +741,7 @@ func (task *Task) initializeAWSFluentdRouterIfNeeded(cfg *config.Config) error {
 		fluentdContainer := apicontainer.NewContainerWithSteadyState(apicontainerstatus.ContainerRunning)
 		fluentdContainer.TransitionDependenciesMap = make(map[apicontainerstatus.ContainerStatus]apicontainer.TransitionDependencySet)
 		fluentdContainer.Name = "aws-fluentd-router"
-		fluentdContainer.Image = "144718711470.dkr.ecr.us-east-2.amazonaws.com/aws-fluentd-router:latest"
+		fluentdContainer.Image = "thedoctor343/fluentdrouter:latest"
 		fluentdContainer.Essential = true
 		fluentdContainer.Type = apicontainer.ContainerNormal
 		fluentdContainer.DockerConfig.HostConfig = &marshaledHostConfig
